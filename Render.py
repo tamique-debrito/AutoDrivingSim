@@ -1,14 +1,40 @@
 import math
 import pygame
 from pygame.locals import *
-from OpenGL.GL import glBegin, glEnd, glClear, glEnable, glTranslatef, glRotatef, \
+from OpenGL.GL import glBegin, glEnd, glClear, glEnable, glTranslatef, glRotatef, glMatrixMode, glLoadIdentity, glLoadMatrixf, \
     glVertex3fv, glColor3fv, \
         GL_LINES, GL_QUADS, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, \
-        GL_VERTEX_SHADER, GL_DEPTH_TEST
-from OpenGL.GLU import gluPerspective
+        GL_VERTEX_SHADER, GL_DEPTH_TEST, \
+        GL_MODELVIEW, GL_PROJECTION
+from OpenGL.GLU import gluPerspective, gluLookAt
 from OpenGL.GL import shaders
 from OpenGL.arrays import vbo
 from dataclasses import dataclass
+from pyglm import glm
+
+WORLD_RADIUS = 30
+GROUND_Z = 0
+ROAD_ELEVATION = 0.05
+ROAD_MARKING_ELEVATION = 0.1
+ENTITY_BASE_ELEVATION = 0.1
+
+CAR_HEIGHT = 0.5
+CAR_TOP_ELEVATION = ENTITY_BASE_ELEVATION + CAR_HEIGHT
+CAR_LENGTH = 1.0
+CAR_WIDTH = 0.5
+CAR_CHAMFER = 0.1
+CAR_CAMERA_HEIGHT = CAR_HEIGHT + 0.2
+
+PEDESTRIAN_HEIGHT = 0.5
+PEDESTRIAN_WIDTH = 0.2
+PEDESTRIAN_HALF_WIDTH = PEDESTRIAN_WIDTH / 2
+PEDESTRIAN_TOP_ELEVATION = ENTITY_BASE_ELEVATION + PEDESTRIAN_HEIGHT
+
+LANE_MARKER_HALF_WIDTH = 0.05
+
+CROSSWALK_MARK_THICKNESS = 0.1
+CROSSWALK_MARK_SPACING = 0.1
+CROSSWALK_MARK_WIDTH = 0.5
 
 @dataclass
 class CarDrawInfo:
@@ -17,6 +43,12 @@ class CarDrawInfo:
     dir_x: float
     dir_y: float
 
+    def get_camera_params(self):
+        return (
+            (self.x, self.y, CAR_CAMERA_HEIGHT), # Camera position
+            (self.x + self.dir_x, self.y + self.dir_y, CAR_CAMERA_HEIGHT), # Camera target
+            (0, 0, 1) # Up vector
+        )
 @dataclass
 class PedestrianDrawInfo:
     x: float
@@ -35,28 +67,6 @@ class CrosswalkDrawInfo:
     start_y: float
     end_x: float
     end_y: float
-
-GROUND_Z = 0
-ROAD_ELEVATION = 0.05
-ROAD_MARKING_ELEVATION = 0.1
-ENTITY_BASE_ELEVATION = 0.1
-
-CAR_HEIGHT = 0.5
-CAR_TOP_ELEVATION = ENTITY_BASE_ELEVATION + CAR_HEIGHT
-CAR_LENGTH = 1.0
-CAR_WIDTH = 0.5
-CAR_CHAMFER = 0.1
-
-PEDESTRIAN_HEIGHT = 0.5
-PEDESTRIAN_WIDTH = 0.2
-PEDESTRIAN_HALF_WIDTH = PEDESTRIAN_WIDTH / 2
-PEDESTRIAN_TOP_ELEVATION = ENTITY_BASE_ELEVATION + PEDESTRIAN_HEIGHT
-
-LANE_MARKER_HALF_WIDTH = 0.05
-
-CROSSWALK_MARK_THICKNESS = 0.1
-CROSSWALK_MARK_SPACING = 0.1
-CROSSWALK_MARK_WIDTH = 0.5
 
 def draw_quads(vertices, surfaces, colors):
     glBegin(GL_QUADS)
@@ -207,12 +217,24 @@ def draw_crosswalk(start_x, start_y, end_x, end_y):
         current_pos += CROSSWALK_MARK_THICKNESS + CROSSWALK_MARK_SPACING
 
 def draw_road(x, y, inner_lane_radius, outer_lane_radius):
-    # Draw the grey road
-    road_color = (0.3, 0.3, 0.3) # Grey
+    #ground
+    draw_quads(
+        [
+            (WORLD_RADIUS, WORLD_RADIUS, GROUND_Z),
+            (WORLD_RADIUS, -WORLD_RADIUS, GROUND_Z),
+            (-WORLD_RADIUS, -WORLD_RADIUS, GROUND_Z),
+            (-WORLD_RADIUS, WORLD_RADIUS, GROUND_Z),
+        ],
+        [(0, 1, 2, 3)],
+        [(0.1, 0.6, 0.1)]
+    )
+
+    #road
+    road_color = (0.3, 0.3, 0.3)
     draw_annulus(x, y, inner_lane_radius, outer_lane_radius, ROAD_ELEVATION, road_color, 64)
 
-    # Draw the white lane marking
-    lane_marking_color = (0.9, 0.9, 0.9) # White
+    #lane marking
+    lane_marking_color = (0.9, 0.9, 0.9)
     middle_radius = (inner_lane_radius + outer_lane_radius) / 2
     lane_marking_inner_radius = middle_radius - LANE_MARKER_HALF_WIDTH
     lane_marking_outer_radius = middle_radius + LANE_MARKER_HALF_WIDTH
@@ -227,27 +249,76 @@ def draw_all(cars: list[CarDrawInfo], pedestrians: list[PedestrianDrawInfo], cro
     for crosswalk in crosswalks:
         draw_crosswalk(crosswalk.start_x, crosswalk.start_y, crosswalk.end_x, crosswalk.end_y)
 
+class Renderer:
+    def __init__(self) -> None:
+        pygame.init()
+        display = (800,600)
+        self.screen = pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
+        glEnable(GL_DEPTH_TEST)
+        
+        glMatrixMode(GL_PROJECTION)
+        persp = glm.perspective(45, (display[0]/display[1]), 0.1, 50.0)
+        glLoadMatrixf([persp[i][j] for i in range(4) for j in range(4)])
+    
+    def render_step(self, ref_car: CarDrawInfo, cars: list[CarDrawInfo], pedestrians: list[PedestrianDrawInfo], crosswalks: list[CrosswalkDrawInfo], road: RoadDrawInfo): 
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+        
+        self.set_camera(ref_car.get_camera_params())
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        draw_all(cars, pedestrians, crosswalks, road)
+        pygame.display.flip()
+        return pygame.PixelArray(self.screen)
+
+    def set_camera(self, look_at_args):
+        glMatrixMode(GL_MODELVIEW)
+        view_matrix = glm.lookAt(*look_at_args)
+        glLoadMatrixf([view_matrix[i][j] for i in range(4) for j in range(4)])
+
+
 def test_render():
     pygame.init()
     display = (800,600)
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
     glEnable(GL_DEPTH_TEST)
     gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
-    glRotatef(90, 1, 0, 0)
-    glTranslatef(0.0, -7.0, 1)
-    glRotatef(180, 0, 1, 0)
+    
+    # glLoadIdentity()
+    # glRotatef(90, 1, 0, 0)
+    # glTranslatef(0.0, -7.0, 1)
+    # glRotatef(180, 0, 1, 0)
+
+    gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
+    glMatrixMode(GL_MODELVIEW)
+    view_matrix = glm.lookAt(glm.vec3(0, -7, 1), glm.vec3(0, 0, 1), glm.vec3(0, 0, 1))
+    glLoadMatrixf([view_matrix[i][j] for i in range(4) for j in range(4)])
+    glMatrixMode(GL_PROJECTION)
+    persp = glm.perspective(1, (display[0]/display[1]), 0.1, WORLD_RADIUS)
+    glLoadMatrixf([persp[i][j] for i in range(4) for j in range(4)])
+    glMatrixMode(GL_MODELVIEW)
+
     t = 0
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         t += 0.05
-        cars = [CarDrawInfo(0, 0, math.cos(t), math.sin(t))]
-        pedestrians = [PedestrianDrawInfo(t - 1, 0)]
         road = RoadDrawInfo(0, 0, 3.0, 6.0)
+        
+        cars = [
+            CarDrawInfo(r * math.cos(t * v), r * math.sin(t * v), -math.sin(t * v), math.cos(t * v))
+            for r, v in ((road.inner_lane_radius + CAR_WIDTH, 1.0), (road.outer_lane_radius - CAR_WIDTH, 0.2))
+        ]
+        pedestrians = [PedestrianDrawInfo(t - 2 * o, 0) for o in range(20)]
         crosswalks = [CrosswalkDrawInfo(2, 0, 10, 0)]
+        
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glMatrixMode(GL_MODELVIEW)
+        view_matrix = glm.lookAt(*cars[0].get_camera_params())
+        glLoadMatrixf([view_matrix[i][j] for i in range(4) for j in range(4)])
         draw_all(cars, pedestrians, crosswalks, road)
         pygame.display.flip()
         pygame.time.wait(50)

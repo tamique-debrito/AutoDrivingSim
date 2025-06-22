@@ -5,6 +5,7 @@ import pygame
 from typing import List, Tuple, Union
 from World import World
 from CarControl import CarControl
+from Render import CarDrawInfo, PedestrianDrawInfo, CrosswalkDrawInfo, RoadDrawInfo
 
 class Pedestrian:
     """Represents a pedestrian with position, direction, and expiry time."""
@@ -78,7 +79,10 @@ class Car:
         self.controller = CarControl(world) # Initialize CarControl here
         self.world = world
     
-    def step(self, time_delta: float, obstacles_info: dict, current_time: float):
+    def get_car_info(self):
+        return self.world.get_car_info(self.x, self.y, self.dir_x, self.dir_y)
+
+    def step(self, obstacles_info: dict, car_info: dict, time_delta: float, current_time: float):
         """
         Step the car forward based on speed, direction, and turn angle, with controls for turn and velocity.
         
@@ -87,7 +91,6 @@ class Car:
             obstacles_info: Dictionary containing collision and proximity information
             current_time: Current simulation time
         """
-        car_info = self.world.get_car_info(self.x, self.y, self.dir_x, self.dir_y)
         control_output = self.controller.step(obstacles_info, time_delta, current_time, car_info)
         target_turn_angle = control_output["target_turn_angle"]
         velocity_control_action = control_output["velocity_action"]
@@ -134,6 +137,7 @@ class Simulator:
         self.cars: List[Car] = []
         self.pedestrians: List[Pedestrian] = []
         self.current_time = 0.0
+        self.next_pedestrian_gen_time = 0.0
         
         # Initialize pygame for rendering
         pygame.init()
@@ -152,6 +156,9 @@ class Simulator:
         self.BLACK = (0, 0, 0)
         self.VERY_LIGHT_GREY = (225, 225, 225)
 
+    def get_car_inputs(self, car: Car):
+        return self.detect_collisions_and_proximity(car), car.get_car_info()
+
     def step(self, time_delta: float):
         """
         Step all cars and pedestrians forward in time.
@@ -160,11 +167,15 @@ class Simulator:
             time_delta: Time step in seconds
         """
         self.current_time += time_delta
+
+        if self.current_time >= self.next_pedestrian_gen_time:
+            self.generate_pedestrian()
+            self.next_pedestrian_gen_time = self.current_time + 5 + random.random() * 5
         
         # Step all cars
         for car in self.cars:
-            obstacles_info = self.detect_collisions_and_proximity(car)
-            car.step(time_delta, obstacles_info, self.current_time)
+            obstacles_info, car_info = self.get_car_inputs(car)
+            car.step(obstacles_info, car_info, time_delta, self.current_time)
         
         # Step all pedestrians and remove expired ones
         self.pedestrians = [ped for ped in self.pedestrians if not ped.step(time_delta, self.current_time)]
@@ -285,13 +296,6 @@ class Simulator:
         pedestrian = Pedestrian(start_x, start_y, dir_x, dir_y, self.current_time + travel_time)
         self.pedestrians.append(pedestrian)
     
-    def get_obs(self):
-        """
-        Returns 3D object representations for all objects.
-        Not implemented yet as specified.
-        """
-        pass
-    
     def render_2d(self):
         """Render the simulation using pygame."""
         # Clear screen
@@ -376,7 +380,15 @@ class Simulator:
 
         # Update display
         pygame.display.flip()
-    
+
     def quit(self):
         """Clean up pygame resources."""
         pygame.quit()
+
+    def get_draw_infos(self):
+        return (
+            [CarDrawInfo(car.x, car.y, car.dir_x, car.dir_y) for car in self.cars],
+            [PedestrianDrawInfo(ped.x, ped.y) for ped in self.pedestrians],
+            [CrosswalkDrawInfo(c[0][0], c[0][1], c[1][0], c[1][1]) for c in self.world.crosswalks],
+            RoadDrawInfo(World.ROAD_CENTER_X, World.ROAD_CENTER_Y, World.ROAD_INNER, World.ROAD_OUTER),
+        )

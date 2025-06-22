@@ -8,6 +8,8 @@ class World:
     """
     
     # Constants
+    ROAD_CENTER_X = 0
+    ROAD_CENTER_Y = 0
     ROAD_RADIUS = 100.0
     LANE_WIDTH = 10.0
     ROAD_INNER = ROAD_RADIUS

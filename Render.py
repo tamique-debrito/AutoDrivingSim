@@ -12,7 +12,12 @@ from OpenGL.arrays import vbo
 from dataclasses import dataclass
 from pyglm import glm
 
-WORLD_RADIUS = 30
+from World import World
+
+VIEW_X = 400
+VIEW_Y = 300
+
+WORLD_RADIUS = World.ROAD_OUTER + World.CROSSWALK_BUFFER
 GROUND_Z = 0
 ROAD_ELEVATION = 0.05
 ROAD_MARKING_ELEVATION = 0.1
@@ -23,18 +28,20 @@ CAR_TOP_ELEVATION = ENTITY_BASE_ELEVATION + CAR_HEIGHT
 CAR_LENGTH = 1.0
 CAR_WIDTH = 0.5
 CAR_CHAMFER = 0.1
-CAR_CAMERA_HEIGHT = CAR_HEIGHT + 0.2
+CAR_CAMERA_HEIGHT = CAR_HEIGHT + 0.3
+CAR_CAMERA_DISPL = -CAR_LENGTH / 2 #displacement of camera along car facing direction
+CAMERA_FOV = 1.7
 
 PEDESTRIAN_HEIGHT = 0.5
 PEDESTRIAN_WIDTH = 0.2
 PEDESTRIAN_HALF_WIDTH = PEDESTRIAN_WIDTH / 2
 PEDESTRIAN_TOP_ELEVATION = ENTITY_BASE_ELEVATION + PEDESTRIAN_HEIGHT
 
-LANE_MARKER_HALF_WIDTH = 0.05
+LANE_MARKER_HALF_WIDTH = World.LANE_WIDTH / 15
 
-CROSSWALK_MARK_THICKNESS = 0.1
-CROSSWALK_MARK_SPACING = 0.1
-CROSSWALK_MARK_WIDTH = 0.5
+CROSSWALK_MARK_THICKNESS = World.LANE_WIDTH / 10
+CROSSWALK_MARK_SPACING = CROSSWALK_MARK_THICKNESS
+CROSSWALK_MARK_WIDTH = CROSSWALK_MARK_THICKNESS * 5
 
 @dataclass
 class CarDrawInfo:
@@ -44,9 +51,10 @@ class CarDrawInfo:
     dir_y: float
 
     def get_camera_params(self):
+        x, y = self.x + self.dir_x * CAR_CAMERA_DISPL, self.y  + self.dir_y * CAR_CAMERA_DISPL
         return (
-            (self.x, self.y, CAR_CAMERA_HEIGHT), # Camera position
-            (self.x + self.dir_x, self.y + self.dir_y, CAR_CAMERA_HEIGHT), # Camera target
+            (x, y, CAR_CAMERA_HEIGHT), # Camera position
+            (x + self.dir_x, y + self.dir_y, CAR_CAMERA_HEIGHT), # Camera target
             (0, 0, 1) # Up vector
         )
 @dataclass
@@ -163,8 +171,6 @@ def draw_annulus(x, y, inner_radius, outer_radius, elevation, color, divisions):
 
     draw_quads(vertices, surfaces, colors)
 
-
-
 def draw_crosswalk(start_x, start_y, end_x, end_y):
     dx = end_x - start_x
     dy = end_y - start_y
@@ -252,20 +258,21 @@ def draw_all(cars: list[CarDrawInfo], pedestrians: list[PedestrianDrawInfo], cro
 class Renderer:
     def __init__(self) -> None:
         pygame.init()
-        display = (800,600)
+        display = (VIEW_X,VIEW_Y)
+        self.display = display
         self.screen = pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
         glEnable(GL_DEPTH_TEST)
-        
+
         glMatrixMode(GL_PROJECTION)
-        persp = glm.perspective(45, (display[0]/display[1]), 0.1, 50.0)
+        persp = glm.perspective(CAMERA_FOV, (display[0]/display[1]), 0.1, 50.0)
         glLoadMatrixf([persp[i][j] for i in range(4) for j in range(4)])
-    
+
     def render_step(self, ref_car: CarDrawInfo, cars: list[CarDrawInfo], pedestrians: list[PedestrianDrawInfo], crosswalks: list[CrosswalkDrawInfo], road: RoadDrawInfo): 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-        
+
         self.set_camera(ref_car.get_camera_params())
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         draw_all(cars, pedestrians, crosswalks, road)
@@ -277,19 +284,14 @@ class Renderer:
         view_matrix = glm.lookAt(*look_at_args)
         glLoadMatrixf([view_matrix[i][j] for i in range(4) for j in range(4)])
 
-
 def test_render():
+    X = 1.5
     pygame.init()
-    display = (800,600)
+    display = (VIEW_X,VIEW_Y)
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
     glEnable(GL_DEPTH_TEST)
     gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
     
-    # glLoadIdentity()
-    # glRotatef(90, 1, 0, 0)
-    # glTranslatef(0.0, -7.0, 1)
-    # glRotatef(180, 0, 1, 0)
-
     gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
     glMatrixMode(GL_MODELVIEW)
     view_matrix = glm.lookAt(glm.vec3(0, -7, 1), glm.vec3(0, 0, 1), glm.vec3(0, 0, 1))
@@ -316,6 +318,13 @@ def test_render():
         crosswalks = [CrosswalkDrawInfo(2, 0, 10, 0)]
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        
+
+        
+        glMatrixMode(GL_PROJECTION)
+        persp = glm.perspective(X, (display[0]/display[1]), 0.1, 50.0)
+        X += 0.0001; print(X)
+        glLoadMatrixf([persp[i][j] for i in range(4) for j in range(4)])
         glMatrixMode(GL_MODELVIEW)
         view_matrix = glm.lookAt(*cars[0].get_camera_params())
         glLoadMatrixf([view_matrix[i][j] for i in range(4) for j in range(4)])

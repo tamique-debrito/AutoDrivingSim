@@ -292,7 +292,7 @@ class Simulator:
         """
         pass
     
-    def render(self):
+    def render_2d(self):
         """Render the simulation using pygame."""
         # Clear screen
         self.screen.fill(self.WHITE)

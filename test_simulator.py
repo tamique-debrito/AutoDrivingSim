@@ -52,7 +52,7 @@ def test_simulator():
         sim.step(time_delta)
         
         # Render
-        sim.render()
+        sim.render_2d()
         
         # Small delay to control frame rate
         time.sleep(0.016)  # ~60 FPS
@@ -100,7 +100,7 @@ def test_car_movement():
         time_delta = min(time_delta, 0.1)
         
         sim.step(time_delta)
-        sim.render()
+        sim.render_2d()
         time.sleep(0.016)
     
     sim.quit()
@@ -133,7 +133,7 @@ def test_pedestrian_generation():
         time_delta = min(time_delta, 0.1)
         
         sim.step(time_delta)
-        sim.render()
+        sim.render_2d()
         time.sleep(0.016)
     
     sim.quit()

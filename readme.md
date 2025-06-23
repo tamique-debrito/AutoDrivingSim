@@ -4,17 +4,14 @@ This is a project that explores concepts related to self-driving cars in a simul
 - Extracting a dataset from the simulation and using it to train a convolutional neural network that can be used to control a car, then evaluating the performance of this network
 
 An approximate system diagram is as follows:
-![image](simple system sketch.png)
 
-Here are some example videos:
-The 2d renderer:
-<video src="2d simulation rendering.mp4" width="320" height="240" controls></video>
-The 3d renderer:
-<video src="3d simulation rendering.mp4" width="320" height="240" controls></video>
-Examples of the car controlled by the neural network:
-With a smaller neural network and few samples:
-<video src="car performance 1 - failure.mp4" width="320" height="240" controls></video>
-With a smaller neural network and more samples:
-<video src="car performance 2 - semi-successful.mp4" width="320" height="240" controls></video>
-With a slightly larger neural network, more samples, and some randomness introduced into the simulation:
-<video src="car performance 3 - semi-successful.mp4" width="320" height="240" controls></video>
+![image](https://github.com/user-attachments/assets/0ad03b79-195b-46de-8bb7-79f458ae9514)
+
+
+There are some example videos in this repository:
+- The 2d renderer: "2d simulation rendering.mp4"
+- The 3d renderer: "3d simulation rendering.mp4"
+- Examples of the car controlled by the neural network:
+- With a smaller neural network and few samples: "car performance 1 - failure.mp4"
+- With a smaller neural network and more samples: "./car performance 2 - semi-successful.mp4"
+- With a slightly larger neural network, more samples, and some randomness introduced into the simulation: "/car performance 3 - semi-successful.mp4"

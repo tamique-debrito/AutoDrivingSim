@@ -2,3 +2,6 @@
 *Notes.txt
 *.pyc
 .venv/*
+Evaluations data
+simple_cnn_model.torch
+training_data.pkl

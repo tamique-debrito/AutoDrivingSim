@@ -1,6 +1,8 @@
 import math
 from typing import Tuple, List, Dict, Any
 
+from DataClasses import CarInfo
+
 class World:
     """
     World model for a car simulator with a circular road and two lanes.
@@ -23,7 +25,7 @@ class World:
             ((0, -World.ROAD_INNER + World.CROSSWALK_BUFFER), (0, -World.ROAD_OUTER - World.CROSSWALK_BUFFER)),
         ]
     
-    def get_car_info(self, x: float, y: float, dx: float, dy: float) -> Dict[str, Any]:
+    def get_car_info(self, x: float, y: float, dx: float, dy: float) -> CarInfo:
         """
         Given x/y location and direction, return info relevant to a car at that location.
         
@@ -32,31 +34,30 @@ class World:
             y: Y coordinate of the car
             dx: X component of the car's direction
             dy: Y component of the car's direction
-        Returns:
-            Dictionary containing:
-            - 'lane_position': Signed distance from center of lane (negative = left, positive = right)
-            - 'lane': Lane name ("Left" or "Right")
-            - 'distance_from_center': Distance from road center
-            - 'angle_relative_to_road': Angle relative to road direction
+        Returns: CarInfo
         """
         distance_from_center = math.sqrt(x**2 + y**2)
         
         right_lane_center_radius = self.ROAD_RADIUS + self.LANE_WIDTH / 2
         left_lane_center_radius = self.ROAD_RADIUS + 3 * self.LANE_WIDTH / 2
         
+        lane = None
+        lane_center_distance = 0
+
         if distance_from_center <= right_lane_center_radius + self.LANE_WIDTH / 2:
             lane = "Right"
             lane_center_distance = right_lane_center_radius
         elif distance_from_center >= left_lane_center_radius - self.LANE_WIDTH / 2:
             lane = "Left"
             lane_center_distance = left_lane_center_radius
-        else:
-            return {
-                'lane_position': None,
-                'lane': None,
-                'distance_from_center': distance_from_center,
-                'angle_relative_to_road': None,
-            }
+        
+        if lane is None:
+            return CarInfo(
+                lane_position=0.0, # Default or error value
+                lane="Unknown",
+                distance_from_center=distance_from_center,
+                angle_relative_to_road=0.0  # Default or error value
+            )
         
         # Calculate signed distance from lane center
         # Positive means car is to the right of lane center (when facing direction of travel)
@@ -64,7 +65,7 @@ class World:
         lane_position = -(distance_from_center - lane_center_distance)
         
         # Calculate angle relative to road direction
-        angle_relative_to_road = None
+        angle_relative_to_road = 0.0 # Default value
         car_direction_magnitude = math.sqrt(dx**2 + dy**2)
         
         if distance_from_center > 0 and car_direction_magnitude > 0:
@@ -74,9 +75,9 @@ class World:
             
             angle_relative_to_road = math.atan2(y_component, x_component)
             
-        return {
-            'lane_position': lane_position,
-            'lane': lane,
-            'distance_from_center': distance_from_center,
-            'angle_relative_to_road': angle_relative_to_road,
-        }
+        return CarInfo(
+            lane_position=lane_position,
+            lane=lane,
+            distance_from_center=distance_from_center,
+            angle_relative_to_road=angle_relative_to_road
+        )

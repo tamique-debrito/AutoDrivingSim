@@ -3,9 +3,11 @@ import math
 import random
 import pygame
 from typing import List, Tuple, Union
+from DataClasses import ObstaclesInfo
 from World import World
 from CarControl import CarControl
 from Render import CarDrawInfo, PedestrianDrawInfo, CrosswalkDrawInfo, RoadDrawInfo
+from DataClasses import CarInfo
 
 class Pedestrian:
     """Represents a pedestrian with position, direction, and expiry time."""
@@ -79,10 +81,10 @@ class Car:
         self.controller = CarControl(world) # Initialize CarControl here
         self.world = world
     
-    def get_car_info(self):
+    def get_car_info(self) -> CarInfo:
         return self.world.get_car_info(self.x, self.y, self.dir_x, self.dir_y)
 
-    def step(self, obstacles_info: dict, car_info: dict, time_delta: float, current_time: float):
+    def step(self, obstacles_info: ObstaclesInfo, car_info: CarInfo, time_delta: float, current_time: float):
         """
         Step the car forward based on speed, direction, and turn angle, with controls for turn and velocity.
         
@@ -92,11 +94,11 @@ class Car:
             current_time: Current simulation time
         """
         control_output = self.controller.step(obstacles_info, time_delta, current_time, car_info)
-        target_turn_angle = control_output["target_turn_angle"]
-        velocity_control_action = control_output["velocity_action"]
+        target_turn_angle = control_output.target_turn_angle
+        velocity_control_action = control_output.velocity_action
         
         # Apply turn angle control
-        self.turn_angle = (self.turn_angle + target_turn_angle) / 2.0
+        self.turn_angle = (self.turn_angle + target_turn_angle) / 2.0 * (0.9 + random.random() * 0.2)
 
         # Apply velocity control
         if velocity_control_action == "drive":
@@ -138,6 +140,7 @@ class Simulator:
         self.pedestrians: List[Pedestrian] = []
         self.current_time = 0.0
         self.next_pedestrian_gen_time = 0.0
+        self.collision_tracking: dict[Car, int] = {}
         
         # Initialize pygame for rendering
         pygame.init()
@@ -156,6 +159,12 @@ class Simulator:
         self.BLACK = (0, 0, 0)
         self.VERY_LIGHT_GREY = (225, 225, 225)
 
+    def add_default_cars(self, n):
+        car_positions = [(World.ROAD_RADIUS, 0), (0, World.ROAD_RADIUS), (-World.ROAD_RADIUS, 0), (0, -World.ROAD_RADIUS), (-World.ROAD_RADIUS * 0.7, World.ROAD_RADIUS * 0.7)]
+        for x, y in car_positions[:n]:
+            self.add_car(x, y, y, -x)
+            self.cars[0].speed = 8.0 + random.random() * 10
+
     def get_car_inputs(self, car: Car):
         return self.detect_collisions_and_proximity(car), car.get_car_info()
 
@@ -170,11 +179,13 @@ class Simulator:
 
         if self.current_time >= self.next_pedestrian_gen_time:
             self.generate_pedestrian()
-            self.next_pedestrian_gen_time = self.current_time + 5 + random.random() * 5
+            self.next_pedestrian_gen_time = self.current_time + 2 + random.random() * 3
         
         # Step all cars
         for car in self.cars:
             obstacles_info, car_info = self.get_car_inputs(car)
+            if obstacles_info.collision_risk:
+                self.collision_tracking[car] += 1
             car.step(obstacles_info, car_info, time_delta, self.current_time)
         
         # Step all pedestrians and remove expired ones
@@ -192,6 +203,7 @@ class Simulator:
         """
         car = Car(x, y, dir_x, dir_y, self.world)
         self.cars.append(car)
+        self.collision_tracking[car] = 0
     
     def find_nearby_objects(self, car: Car) -> List[Tuple[str, Union[Car, Pedestrian], float]]:
         """
@@ -221,33 +233,28 @@ class Simulator:
         
         return nearby_objects
     
-    def detect_collisions_and_proximity(self, car: Car) -> dict:
+    def detect_collisions_and_proximity(self, car: Car) -> ObstaclesInfo:
         """
         Detect collisions and determine proximity of objects around a car.
         
         Args:
             car: The car to check around
             
-        Returns:
-            Dictionary containing collision and proximity information:
-            - 'collision_risk': True if any object is within CAR_COLLISION_THRESHOLD
-            - 'left_obstacle': True if object is within 5 units to the left
-            - 'right_obstacle': True if object is within 5 units to the right
-            - 'front_obstacle': True if object is within 5 units in front
+        Returns: ObstaclesInfo
         """
         nearby_objects = self.find_nearby_objects(car)
         
-        result = {
-            'collision_risk': False,
-            'left_obstacle': False,
-            'right_obstacle': False,
-            'front_obstacle': False
-        }
+        result = ObstaclesInfo(
+            collision_risk=False,
+            left_obstacle=False,
+            right_obstacle=False,
+            front_obstacle=False
+        )
         
         for obj_type, obj, distance in nearby_objects:
             # Check for collision risk
             if distance <= self.CAR_COLLISION_THRESHOLD:
-                result['collision_risk'] = True
+                result.collision_risk = True
             
             # Determine relative position
             # Calculate vector from car to object
@@ -263,12 +270,12 @@ class Simulator:
             
             # Determine if object is in front (positive forward component)
             if forward_component/abs(perpendicular_component) > 1.5 and forward_component <= self.FRONT_PROXIMITY_THRESHOLD:
-                result['front_obstacle'] = True
+                result.front_obstacle = True
             elif abs(perpendicular_component) <= self.SIDE_PROXIMITY_THRESHOLD:
                 if perpendicular_component > 0:  # Object is to the left
-                    result['left_obstacle'] = True
+                    result.left_obstacle = True
                 elif perpendicular_component < 0:  # Object is to the right
-                    result['right_obstacle'] = True
+                    result.right_obstacle = True
             
         return result
     

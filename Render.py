@@ -1,14 +1,15 @@
 import math
 import pygame
+import numpy as np
 from pygame.locals import *
-from OpenGL.GL import glBegin, glEnd, glClear, glEnable, glTranslatef, glRotatef, glMatrixMode, glLoadIdentity, glLoadMatrixf, \
+from OpenGL.GL import glBegin, glEnd, glClear, glEnable, glMatrixMode, glLoadMatrixf, \
     glVertex3fv, glColor3fv, \
-        GL_LINES, GL_QUADS, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, \
-        GL_VERTEX_SHADER, GL_DEPTH_TEST, \
-        GL_MODELVIEW, GL_PROJECTION
-from OpenGL.GLU import gluPerspective, gluLookAt
-from OpenGL.GL import shaders
-from OpenGL.arrays import vbo
+    glPixelStorei, glReadPixels, \
+    GL_LINES, GL_QUADS, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_PACK_ALIGNMENT,\
+    GL_VERTEX_SHADER, GL_DEPTH_TEST, \
+    GL_MODELVIEW, GL_PROJECTION, \
+    GL_RGB, GL_UNSIGNED_BYTE
+from OpenGL.GLU import gluPerspective
 from dataclasses import dataclass
 from pyglm import glm
 
@@ -75,6 +76,21 @@ class CrosswalkDrawInfo:
     start_y: float
     end_x: float
     end_y: float
+
+def get_opengl_frame():
+    # Read the pixels from the framebuffer
+    glPixelStorei(GL_PACK_ALIGNMENT, 1)
+    data = glReadPixels(0, 0, VIEW_X, VIEW_Y, GL_RGB, GL_UNSIGNED_BYTE)
+    
+    # Convert to NumPy array
+    image = np.frombuffer(data, dtype=np.uint8)
+    image = image.reshape((VIEW_Y, VIEW_X, 3))
+
+    image = np.flipud(image)
+
+    #image = np.transpose(image, (1, 0, 2))
+    
+    return image.copy()
 
 def draw_quads(vertices, surfaces, colors):
     glBegin(GL_QUADS)
@@ -258,7 +274,7 @@ def draw_all(cars: list[CarDrawInfo], pedestrians: list[PedestrianDrawInfo], cro
 class Renderer:
     def __init__(self) -> None:
         pygame.init()
-        display = (VIEW_X,VIEW_Y)
+        display = (VIEW_X, VIEW_Y)
         self.display = display
         self.screen = pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
         glEnable(GL_DEPTH_TEST)
@@ -276,8 +292,9 @@ class Renderer:
         self.set_camera(ref_car.get_camera_params())
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         draw_all(cars, pedestrians, crosswalks, road)
+        frame = get_opengl_frame()
         pygame.display.flip()
-        return pygame.PixelArray(self.screen)
+        return frame
 
     def set_camera(self, look_at_args):
         glMatrixMode(GL_MODELVIEW)
@@ -288,7 +305,7 @@ def test_render():
     X = 1.5
     pygame.init()
     display = (VIEW_X,VIEW_Y)
-    pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
+    screen = pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
     glEnable(GL_DEPTH_TEST)
     gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
     

@@ -159,6 +159,12 @@ class Simulator:
         self.BLACK = (0, 0, 0)
         self.VERY_LIGHT_GREY = (225, 225, 225)
 
+    def reset(self):
+        self.cars = []
+        self.pedestrians = []
+        self.current_time = 0.0
+        self.next_pedestrian_gen_time = 0.0
+
     def add_default_cars(self, n):
         car_positions = [(World.ROAD_RADIUS, 0), (0, World.ROAD_RADIUS), (-World.ROAD_RADIUS, 0), (0, -World.ROAD_RADIUS), (-World.ROAD_RADIUS * 0.7, World.ROAD_RADIUS * 0.7)]
         for x, y in car_positions[:n]:
@@ -175,6 +181,7 @@ class Simulator:
         Args:
             time_delta: Time step in seconds
         """
+        time_delta *= (0.9 + random.random() * 0.2) # add some more noise
         self.current_time += time_delta
 
         if self.current_time >= self.next_pedestrian_gen_time:

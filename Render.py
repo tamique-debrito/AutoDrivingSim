@@ -15,8 +15,8 @@ from pyglm import glm
 
 from World import World
 
-VIEW_X = 400
-VIEW_Y = 300
+VIEW_X = 200
+VIEW_Y = 150
 
 WORLD_RADIUS = World.ROAD_OUTER + World.CROSSWALK_BUFFER
 GROUND_Z = 0
@@ -31,7 +31,7 @@ CAR_WIDTH = 0.5
 CAR_CHAMFER = 0.1
 CAR_CAMERA_HEIGHT = CAR_HEIGHT + 0.3
 CAR_CAMERA_DISPL = -CAR_LENGTH / 2 #displacement of camera along car facing direction
-CAMERA_FOV = 1.7
+CAMERA_FOV = 1.4
 
 PEDESTRIAN_HEIGHT = 0.5
 PEDESTRIAN_WIDTH = 0.2

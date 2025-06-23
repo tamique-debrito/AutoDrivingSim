@@ -22,6 +22,11 @@ class DatasetExtractor(Dataset):
         self.current_sample_count = 0
         self.next_collection_time = self.collection_interval # give simulator some time to get away from starting state
 
+    def reset(self):
+        self.sim.reset()
+        self._set_up_simulator_default()
+        self.next_collection_time = self.collection_interval
+
     def __len__(self):
         return self.num_samples
 

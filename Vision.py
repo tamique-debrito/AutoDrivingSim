@@ -5,8 +5,6 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
-# Assuming DatasetExtractor is available from Dataset.py
-# You might need to adjust the import path if Dataset.py is not in the same directory
 from Dataset import DatasetExtractor
 
 class SimpleCNN(nn.Module):
@@ -14,29 +12,27 @@ class SimpleCNN(nn.Module):
         super(SimpleCNN, self).__init__()
         self.tanh = nn.Tanh()
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=2),
+            nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout2d(0.5),
+            nn.Dropout2d(0.25),
 
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout2d(0.5),
+            nn.Dropout2d(0.25),
 
             nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout2d(0.5),
+            nn.Dropout2d(0.25),
 
-            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout2d(0.75),
+            # nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
+            # nn.Dropout2d(0.25),
         )
 
-        # Calculate flattened features size dynamically
-        # We'll pass a dummy tensor to determine the size after conv layers
         self._to_linear = None
         self.fc_input_size = self._get_conv_output_size()
 
@@ -48,14 +44,13 @@ class SimpleCNN(nn.Module):
         )
 
     def _get_conv_output_size(self):
-        # Pass a dummy input to calculate the output size of the conv layers
         dummy_input = torch.zeros(1, 3, VIEW_X, VIEW_Y)
         output = self.conv_layers(dummy_input)
         return int(np.prod(output.size()))
 
     def forward(self, x):
         x = self.conv_layers(x)
-        x = x.view(x.size(0), -1) # Flatten the output for the fully connected layers
+        x = x.view(x.size(0), -1)
         x = self.fc_layers(x)
         return torch.concatenate((x[:, :4], self.tanh(x[:, 4:])), dim=1)
 
@@ -95,13 +90,15 @@ class StreamingCarDataset(Dataset):
         return frame, target
 
 class ModelTrainer:
-    def __init__(self, model, dataloader, learning_rate=0.001):
+    def __init__(self, model, dataloader, learning_rate=0.001, mse_weight=0.8, logits_weight=0.2, allow_cuda=True):
         self.model = model
         self.dataloader = dataloader
         self.criterion_logits = nn.BCEWithLogitsLoss()
         self.criterion_mse = nn.MSELoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.mse_weight = mse_weight
+        self.logits_weight = logits_weight
+        self.device = torch.device("cuda" if torch.cuda.is_available() and allow_cuda else "cpu") # Trying to use CUDA can mess with OpenGL, so default to not
         print(f"using device: {self.device}")
         self.model.to(self.device)
 
@@ -128,8 +125,8 @@ class ModelTrainer:
             outputs_mse = outputs[:, 4:]
             targets_mse = targets[:, 4:]
 
-            loss_logits = self.criterion_logits(outputs_logits, targets_logits)
-            loss_mse = self.criterion_mse(outputs_mse, targets_mse)
+            loss_logits = self.criterion_logits(outputs_logits, targets_logits) * self.logits_weight
+            loss_mse = self.criterion_mse(outputs_mse, targets_mse) * self.mse_weight
 
             loss = loss_logits + loss_mse
             loss.backward()

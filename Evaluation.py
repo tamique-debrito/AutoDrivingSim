@@ -110,18 +110,15 @@ class AutonomousSimulator(Simulator):
 
 def evaluate_vision(model: SimpleCNN, num_samples: int = 100):
     print("Collecting evaluation data...")
-    extractor = DatasetExtractor(num_samples, sim_time_delta=0.05, collection_interval=0.0) # don't skip any timesteps
+    extractor = DatasetExtractor(num_samples, sim_time_delta=0.05, collection_interval=0.1) # don't skip any timesteps
     collected_data = extractor.run()
     print(f"Collected {len(collected_data)} samples for evaluation.")
-
-    if not collected_data:
-        print("No data collected for evaluation. Exiting.")
-        return
 
     dataset = CarDataset(collected_data)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False) # Batch size of 1 for evaluating each sample
 
     model.eval() # Set model to evaluation mode
+    model.cpu()
     
     losses = []
     accuracies = []
@@ -131,6 +128,7 @@ def evaluate_vision(model: SimpleCNN, num_samples: int = 100):
 
     with torch.no_grad(): # Disable gradient calculation during evaluation
         for i, (frames, targets) in enumerate(dataloader):
+
             outputs = model(frames)
 
             outputs_logits = outputs[:, :4]
@@ -172,7 +170,7 @@ def evaluate_vision(model: SimpleCNN, num_samples: int = 100):
 
 def test_vision_model(model: SimpleCNN):
     print("Starting autonomous car simulation...")
-    which_car = 0
+    which_car = 1
     
     # Initialize the autonomous simulator
     autonomous_sim = AutonomousSimulator(model)
@@ -182,7 +180,7 @@ def test_vision_model(model: SimpleCNN):
     total_sim_time = 100 # Run for 100 seconds (adjust as needed for test duration)
 
     
-    while autonomous_sim.current_time < 6:
+    while autonomous_sim.current_time < 4:
         autonomous_sim.step(time_delta) # allow things to progress past initialization
         car_draw_infos, ped_draw_infos, walk_draw_infos, road_draw_info = autonomous_sim.get_draw_infos()
         autonomous_sim.renderer.render_step(car_draw_infos[which_car], car_draw_infos, ped_draw_infos, walk_draw_infos, road_draw_info)
@@ -201,8 +199,9 @@ def test_vision_model(model: SimpleCNN):
 
 if __name__ == "__main__":
     eval_loss = False
-    use_streaming_dataset = True
-    num_training_samples = 2000
+    use_streaming_dataset = False
+    num_training_samples = 5000
+    collection_interval = 0.1
 
     collected_training_data = None
     if not use_streaming_dataset:
@@ -214,7 +213,7 @@ if __name__ == "__main__":
             print(f"Training data loaded from {train_data_path}")
         except FileNotFoundError:
             print(f"{train_data_path} not found. Collecting new training data...")
-            extractor = DatasetExtractor(num_training_samples, sim_time_delta=0.05, collection_interval=0)
+            extractor = DatasetExtractor(num_training_samples, sim_time_delta=0.05, collection_interval=collection_interval)
             collected_training_data = extractor.run() #, obstacle_sample_proportion=0.05)
             print(f"Collected {len(collected_training_data)} training samples.")
 
@@ -224,9 +223,11 @@ if __name__ == "__main__":
             print(f"Training data saved to {train_data_path}")
 
     if collected_training_data or use_streaming_dataset:
+        CarControl.COMMAND_CHANGE_INTERVAL_LOWER = 2
+        CarControl.COMMAND_CHANGE_INTERVAL_UPPER = 4
         print("Creating training dataset and dataloader...")
         if use_streaming_dataset:
-            training_dataset = StreamingCarDataset(DatasetExtractor(num_training_samples, sim_time_delta=0.05, collection_interval=0))
+            training_dataset = StreamingCarDataset(DatasetExtractor(num_training_samples, sim_time_delta=0.05, collection_interval=collection_interval))
         else:
             training_dataset = CarDataset(collected_training_data)
         training_dataloader = torch.utils.data.DataLoader(training_dataset, batch_size=32, shuffle=True)
@@ -244,20 +245,21 @@ if __name__ == "__main__":
             model_to_evaluate.load_state_dict(torch.load(model_path))
             print(f"Model loaded from {model_path}")
         except FileNotFoundError:
-            CarControl.COMMAND_CHANGE_INTERVAL_LOWER = 3
-            CarControl.COMMAND_CHANGE_INTERVAL_UPPER = 5
             print(f"Model file {model_path} not found. Training a new model...")
             print("Starting training...")
             trainer = ModelTrainer(model_to_evaluate, training_dataloader, learning_rate=0.001)
-            for epoch in range(15):
+            for epoch in range(50):
+                if use_streaming_dataset:
+                    training_dataset.data_extractor.reset()
                 trainer.run_epoch(epoch)
-                print(f"Training sim time: {training_dataset.data_extractor.sim.current_time} ({training_dataset.data_extractor.current_sample_count} samples)")
+                if use_streaming_dataset:
+                    print(f"Training sim time: {training_dataset.data_extractor.sim.current_time} ({training_dataset.data_extractor.current_sample_count} samples)")
             print("Training complete.")
             torch.save(model_to_evaluate.state_dict(), model_path)
             print(f"Model saved to {model_path}")
 
-        CarControl.COMMAND_CHANGE_INTERVAL_LOWER = 10
-        CarControl.COMMAND_CHANGE_INTERVAL_UPPER = 15
+        CarControl.COMMAND_CHANGE_INTERVAL_LOWER = 4
+        CarControl.COMMAND_CHANGE_INTERVAL_UPPER = 6
         # Now evaluate the trained model
         if eval_loss:
             evaluate_vision(model_to_evaluate, num_samples=500)

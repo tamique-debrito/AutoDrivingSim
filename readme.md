@@ -1,4 +1,4 @@
-This is a project that explores concepts related to self-driving cars in a simulated environment. It involves:
+Weekend of 06/21/2025 project. Explores concepts related to self-driving cars in a simulated environment. Involves:
 - Simulating the road, cars, and pedestrians
 - Rendering 2d and 3d representations of the world using PyGame and OpenGL
 - Extracting a dataset from the simulation, using it to train a convolutional neural network that can be used to control a car, then evaluating the qualitative performance of the network

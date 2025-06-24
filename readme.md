@@ -1,7 +1,7 @@
 This is a project that explores concepts related to self-driving cars in a simulated environment. It involves:
 - Simulating the road, cars, and pedestrians
 - Rendering 2d and 3d representations of the world using PyGame and OpenGL
-- Extracting a dataset from the simulation and using it to train a convolutional neural network that can be used to control a car, then evaluating the performance of this network
+- Extracting a dataset from the simulation, using it to train a convolutional neural network that can be used to control a car, then evaluating the qualitative performance of the network
 
 An approximate system diagram is as follows:
 

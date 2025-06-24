@@ -5,7 +5,7 @@ Weekend of 06/21/2025 project. Explores concepts related to self-driving cars in
 
 An approximate system diagram is as follows:
 
-![image](https://github.com/user-attachments/assets/0ad03b79-195b-46de-8bb7-79f458ae9514)
+![image](simple system sketch.png)
 
 
 There are some example videos in this repository:

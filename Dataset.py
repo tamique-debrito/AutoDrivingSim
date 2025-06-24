@@ -12,7 +12,7 @@ from World import World
 
 class DatasetExtractor(Dataset):
     """Extract a dataset from a running simulation"""
-    def __init__(self, num_samples, sim_time_delta = 0.1, collection_interval = 0.5):
+    def __init__(self, num_samples, sim_time_delta = 0.1, collection_interval = 0.5, reset_every = None):
         self.sim = Simulator()
         self.renderer = Renderer()
         self._set_up_simulator_default()
@@ -21,11 +21,14 @@ class DatasetExtractor(Dataset):
         self.num_samples = num_samples
         self.current_sample_count = 0
         self.next_collection_time = self.collection_interval # give simulator some time to get away from starting state
+        self.reset_every = reset_every # Reset every time this many simulation steps have elapsed
+        self.until_reset = reset_every
 
     def reset(self):
         self.sim.reset()
         self._set_up_simulator_default()
         self.next_collection_time = self.collection_interval
+        self.until_reset = self.reset_every
 
     def __len__(self):
         return self.num_samples
@@ -101,6 +104,10 @@ class DatasetExtractor(Dataset):
                             continue # no obstacles
                     samples.append((frame, target))
         self.summarize_sample_distribution(samples)
+        if self.reset_every is not None and self.until_reset is not None:
+            self.until_reset -= 1
+            if self.until_reset <= 0:
+                self.reset()
         return samples[:self.num_samples]
     
     @staticmethod

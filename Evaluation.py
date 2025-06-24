@@ -26,6 +26,7 @@ class AutonomousSimulator(Simulator):
         self.autonomous_car = None # Will store the actual autonomous car object
         self.renderer = Renderer() # Renderer for generating frames for the vision model
         self.vision_model.eval() # Set model to evaluation mode
+        self.vision_model.cpu()
 
     def set_autonomous_car(self, index = 0):
         self.autonomous_car = self.cars[index]
@@ -71,13 +72,13 @@ class AutonomousSimulator(Simulator):
             # ObstaclesInfo (4 logits)
             logits_output = model_output[:4]
             # Apply sigmoid and threshold to get boolean values
-            booleans = (F.sigmoid(logits_output) > 0.5).float()
+            probabilities = F.sigmoid(logits_output).float()
             
             obstacles_info = ObstaclesInfo(
                 collision_risk=False, # Not used
-                left_obstacle=bool(booleans[0].item()),
-                right_obstacle=bool(booleans[1].item()),
-                front_obstacle=bool(booleans[2].item())
+                left_obstacle=probabilities[0].item() > 0.3,
+                right_obstacle=probabilities[1].item() > 0.3,
+                front_obstacle=probabilities[2].item() > 0.2
             )
 
             # CarInfo (2 continuous values)
@@ -90,12 +91,13 @@ class AutonomousSimulator(Simulator):
             # Placeholder values for lane and distance_from_center as model doesn't output them
             car_info = CarInfo(
                 lane_position=lane_position,
-                lane="Right" if bool(booleans[3].item()) else "Left", # Placeholder
+                lane="Right" if probabilities[3].item() > 0.5 else "Left", # Placeholder
                 distance_from_center=0.0, # Placeholder
                 angle_relative_to_road=angle_relative_to_road
             )
 
-            #print(f"vision inference: {repr(obstacles_info)}, {repr(car_info)}")
+            if int(10 * self.current_time) % 10 == 0:
+                print(f"vision inference: {repr(obstacles_info)}, {repr(car_info)}")
             
             return obstacles_info, car_info
         else:
@@ -198,10 +200,13 @@ def test_vision_model(model: SimpleCNN):
 
 
 if __name__ == "__main__":
-    eval_loss = False
+    eval_loss = True
     use_streaming_dataset = False
-    num_training_samples = 5000
-    collection_interval = 0.1
+    num_training_samples = 15000
+    collection_interval = 0.05
+    eval_samples = 500
+    time_delta = 0.05
+    learning_rate=0.001
 
     collected_training_data = None
     if not use_streaming_dataset:
@@ -213,8 +218,8 @@ if __name__ == "__main__":
             print(f"Training data loaded from {train_data_path}")
         except FileNotFoundError:
             print(f"{train_data_path} not found. Collecting new training data...")
-            extractor = DatasetExtractor(num_training_samples, sim_time_delta=0.05, collection_interval=collection_interval)
-            collected_training_data = extractor.run() #, obstacle_sample_proportion=0.05)
+            extractor = DatasetExtractor(num_training_samples, sim_time_delta=time_delta, collection_interval=collection_interval, reset_every=eval_samples)
+            collected_training_data = extractor.run()#obstacle_sample_proportion=0.1)
             print(f"Collected {len(collected_training_data)} training samples.")
 
             # Save the newly collected training data
@@ -224,13 +229,13 @@ if __name__ == "__main__":
 
     if collected_training_data or use_streaming_dataset:
         CarControl.COMMAND_CHANGE_INTERVAL_LOWER = 2
-        CarControl.COMMAND_CHANGE_INTERVAL_UPPER = 4
+        CarControl.COMMAND_CHANGE_INTERVAL_UPPER = 3
         print("Creating training dataset and dataloader...")
         if use_streaming_dataset:
-            training_dataset = StreamingCarDataset(DatasetExtractor(num_training_samples, sim_time_delta=0.05, collection_interval=collection_interval))
+            training_dataset = StreamingCarDataset(DatasetExtractor(num_training_samples, sim_time_delta=time_delta, collection_interval=collection_interval))
         else:
             training_dataset = CarDataset(collected_training_data)
-        training_dataloader = torch.utils.data.DataLoader(training_dataset, batch_size=32, shuffle=True)
+        training_dataloader = torch.utils.data.DataLoader(training_dataset, batch_size=256, shuffle=True)
         print(f"Training dataset and dataloader created. (streaming={use_streaming_dataset})")
 
         print("Initializing model for training...")
@@ -247,7 +252,7 @@ if __name__ == "__main__":
         except FileNotFoundError:
             print(f"Model file {model_path} not found. Training a new model...")
             print("Starting training...")
-            trainer = ModelTrainer(model_to_evaluate, training_dataloader, learning_rate=0.001)
+            trainer = ModelTrainer(model_to_evaluate, training_dataloader, learning_rate=learning_rate)
             for epoch in range(50):
                 if use_streaming_dataset:
                     training_dataset.data_extractor.reset()
@@ -262,7 +267,7 @@ if __name__ == "__main__":
         CarControl.COMMAND_CHANGE_INTERVAL_UPPER = 6
         # Now evaluate the trained model
         if eval_loss:
-            evaluate_vision(model_to_evaluate, num_samples=500)
+            evaluate_vision(model_to_evaluate, num_samples=eval_samples)
 
         # Test the vision model in a full simulation
         test_vision_model(model_to_evaluate)
